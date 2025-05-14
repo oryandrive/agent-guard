@@ -28,7 +28,6 @@ DEFAULT_CONJUR_ACCOUNT = "conjur"
 
 HTTP_TIMEOUT_SECS = 2.0
 
-
 class ConjurSecretsProvider(BaseSecretsProvider):
     """
     namespace: Conjur policy base branch
