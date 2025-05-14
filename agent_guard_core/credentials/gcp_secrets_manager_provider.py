@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Optional, List, Union
+from typing import Dict, List, Optional
 
 from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import secretmanager
@@ -34,12 +34,13 @@ class GCPSecretsProvider(BaseSecretsProvider):
         :param region: The primary region for the secret. Defaults to 'us-central1'.
         :param replication_type: Type of replication. Either 'automatic' (cross-region) or 'user_managed' (regional).
                                Defaults to 'automatic'.
-        :param replication_locations: List of locations for user-managed replication. Required if replication_type is 'user_managed'.
+        :param replication_locations: List of locations for user-managed replication.
+         Required if replication_type is 'user_managed'.
         """
         super().__init__()
         self._project_id = project_id
         self._secret_id = secret_id
-        self._secret_id_version = DEFAULT_SECRET_VERSION
+        self._secret_id_version = secret_id_version
         self._region = region
         self._replication_type = replication_type
         self._replication_locations = replication_locations
@@ -48,7 +49,8 @@ class GCPSecretsProvider(BaseSecretsProvider):
 
         if replication_type == "user_managed" and not replication_locations:
             raise SecretProviderException(
-                "replication_locations must be provided when replication_type is 'user_managed'")
+                "replication_locations must be provided when replication_type is 'user_managed'"
+            )
 
     def connect(self) -> bool:
         """
@@ -66,8 +68,8 @@ class GCPSecretsProvider(BaseSecretsProvider):
                 "Error initializing GCP Secrets Manager client: %s", e.args[0])
             raise SecretProviderException(
                 message=
-                "Error connecting to the secret provider: GCPSecretsProvider with this exception: %s"
-                % e.args[0])
+                f"Error connecting to the secret provider: GCPSecretsProvider with this exception: {e}"
+            )
 
     def _secret_path(self) -> str:
         """
@@ -88,7 +90,8 @@ class GCPSecretsProvider(BaseSecretsProvider):
             return {"replication": {"user_managed": {"replicas": locations}}}
         else:
             raise SecretProviderException(
-                f"Invalid replication type: {self._replication_type}. Must be 'automatic' or 'user_managed'")
+                f"Invalid replication type: {self._replication_type}. Must be 'automatic' or 'user_managed'"
+            )
 
     def get_secret_dictionary(self) -> Dict[str, str]:
         """
@@ -137,8 +140,8 @@ class GCPSecretsProvider(BaseSecretsProvider):
                 parent=self._secret_path(),
                 payload={"data": secret_text.encode("UTF-8")})
         except Exception as e:
-            self.logger.error("Error storing secret: %s", e)
-            raise SecretProviderException("Error storing secret: %s" % e)
+            self.logger.error(f"Error storing secret: {e}")
+            raise SecretProviderException(f"Error storing secret:{e}")
 
     def store(self, key: str, secret: str) -> None:
         """
@@ -149,7 +152,8 @@ class GCPSecretsProvider(BaseSecretsProvider):
         :raises SecretProviderException: If key or secret is missing, or if there is an error storing the secret.
 
         Caution:
-        Concurrent access to secrets can cause issues. If two clients simultaneously list, update different environment variables,
+        Concurrent access to secrets can cause issues. If two clients simultaneously list,
+         update different environment variables,
         and then store, one client's updates may override the other's if they are working on the same secret.
         This issue will be addressed in future versions.
         """
