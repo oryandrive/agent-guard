@@ -91,24 +91,20 @@ def test_store_and_update_secret(provider):
 @pytest.mark.gcp
 def test_get_secret_dictionary(provider):
     # Store multiple secrets
-    test_secrets = {
-        "key1": "value1",
-        "key2": "value2",
-        "key3": "value3"
-    }
-    
+    test_secrets = {"key1": "value1", "key2": "value2", "key3": "value3"}
+
     # Store each secret individually
     for key, value in test_secrets.items():
         provider.store(key, value)
-    
+
     # Get all secrets as dictionary
     fetched_secrets = provider.get_secret_dictionary()
-    
+
     # Verify all secrets are present
     for key, value in test_secrets.items():
         assert key in fetched_secrets
         assert fetched_secrets[key] == value
-    
+
     # Clean up
     for key in test_secrets.keys():
         provider.delete(key)
@@ -121,15 +117,15 @@ def test_store_secret_dictionary(provider):
         "dict_key2": "dict_value2",
         "dict_key3": "dict_value3"
     }
-    
+
     # Store dictionary of secrets
     provider.store_secret_dictionary(test_secrets)
-    
+
     # Verify each secret
     for key, value in test_secrets.items():
         fetched_value = provider.get(key)
         assert fetched_value == value
-    
+
     # Clean up
     for key in test_secrets.keys():
-        provider.delete(key) 
+        provider.delete(key)

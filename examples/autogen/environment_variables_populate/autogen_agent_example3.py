@@ -2,17 +2,18 @@ import asyncio
 import os
 from typing import List
 
-from autogen_core import AgentId, SingleThreadedAgentRuntime
+from autogen_core import SingleThreadedAgentRuntime
 from autogen_core.tool_agent import ToolAgent
 from autogen_core.tools import FunctionTool, Tool
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
-from agent_guard_core.credentials.gcp_secrets_manager_provider import GCPSecretsProvider
 from agent_guard_core.credentials.environment_manager import EnvironmentVariablesManager
-from examples.autogen.environment_variables_populate.autogen_common import Message, ToolUseAgent, get_stock_price
+from agent_guard_core.credentials.gcp_secrets_manager_provider import GCPSecretsProvider
+from examples.autogen.environment_variables_populate.autogen_common import ToolUseAgent, get_stock_price
 
 
-@EnvironmentVariablesManager.set_env_vars(GCPSecretsProvider(project_id="your-gcp-project-id"))
+@EnvironmentVariablesManager.set_env_vars(
+    GCPSecretsProvider(project_id="example-project"))
 async def main() -> None:
     """
     The main function to run the agent using GCP Secret Manager for environment variables.
@@ -33,7 +34,7 @@ async def main() -> None:
     tools: List[Tool] = [
         FunctionTool(get_stock_price, description='Get the stock price.')
     ]
-    
+
     # Register the agents.
     await ToolAgent.register(runtime, 'tool_executor_agent',
                              lambda: ToolAgent('tool executor agent', tools))
@@ -46,20 +47,19 @@ async def main() -> None:
                 model='gpt-4',
                 azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
                 azure_deployment='gpt-4',
-                api_version='2024-02-01'), 
-            [tool.schema for tool in tools],
+                api_version='2024-02-01'), [tool.schema for tool in tools],
             'tool_executor_agent'),
     )
 
     try:
         # Start processing messages.
         runtime.start()
-        
+
         # Example of how to store secrets in GCP Secret Manager
         secrets_provider = GCPSecretsProvider(project_id="your-gcp-project-id")
         secrets_provider.store("AZURE_OPENAI_ENDPOINT", "your-azure-endpoint")
         secrets_provider.store("AZURE_OPENAI_API_KEY", "your-azure-api-key")
-        
+
     except Exception as e:
         print(f"Error occurred: {str(e)}")
     finally:
@@ -67,4 +67,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

@@ -1,33 +1,54 @@
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Union
 
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import secretmanager
-from google.api_core.exceptions import NotFound, AlreadyExists
 
 from .secrets_provider import BaseSecretsProvider, SecretProviderException
 
 DEFAULT_PROJECT_ID = "default"
 DEFAULT_SECRET_ID = "agentic_env_vars"
+DEFAULT_REGION = "us-central1"
+DEFAULT_SECRET_VERSION = "latest"
+DEFAULT_REPLICATION_TYPE = "automatic"  # Options: "automatic" or "user_managed"
+
 
 class GCPSecretsProvider(BaseSecretsProvider):
     """
     Manages storing and retrieving secrets from Google Cloud Secret Manager.
+    Supports both regional and cross-region replication.
     """
 
     def __init__(self,
                  project_id: str = DEFAULT_PROJECT_ID,
-                 secret_id: str = DEFAULT_SECRET_ID):
+                 secret_id: str = DEFAULT_SECRET_ID,
+                 secret_id_version: str = DEFAULT_SECRET_VERSION,
+                 region: str = DEFAULT_REGION,
+                 replication_type: str = DEFAULT_REPLICATION_TYPE,
+                 replication_locations: Optional[List[str]] = None):
         """
-        Initializes the GCP Secret Manager client with the specified project ID.
+        Initializes the GCP Secret Manager client with the specified project ID and replication settings.
 
         :param project_id: GCP project ID where the secrets are stored.
         :param secret_id: The ID of the secret to store/retrieve. Defaults to 'agentic_env_vars'.
+        :param region: The primary region for the secret. Defaults to 'us-central1'.
+        :param replication_type: Type of replication. Either 'automatic' (cross-region) or 'user_managed' (regional).
+                               Defaults to 'automatic'.
+        :param replication_locations: List of locations for user-managed replication. Required if replication_type is 'user_managed'.
         """
         super().__init__()
         self._project_id = project_id
         self._secret_id = secret_id
+        self._secret_id_version = DEFAULT_SECRET_VERSION
+        self._region = region
+        self._replication_type = replication_type
+        self._replication_locations = replication_locations
         self._parent = f"projects/{self._project_id}"
         self._client = None
+
+        if replication_type == "user_managed" and not replication_locations:
+            raise SecretProviderException(
+                "replication_locations must be provided when replication_type is 'user_managed'")
 
     def connect(self) -> bool:
         """
@@ -54,6 +75,21 @@ class GCPSecretsProvider(BaseSecretsProvider):
         """
         return f"{self._parent}/secrets/{self._secret_id}"
 
+    def _get_replication_config(self) -> Dict:
+        """
+        Returns the replication configuration based on the replication type.
+        """
+        if self._replication_type == "automatic":
+            return {"replication": {"automatic": {}}}
+        elif self._replication_type == "user_managed":
+            locations = []
+            for location in self._replication_locations:
+                locations.append({"location_id": location})
+            return {"replication": {"user_managed": {"replicas": locations}}}
+        else:
+            raise SecretProviderException(
+                f"Invalid replication type: {self._replication_type}. Must be 'automatic' or 'user_managed'")
+
     def get_secret_dictionary(self) -> Dict[str, str]:
         """
         Retrieves the secret dictionary from GCP Secret Manager.
@@ -63,7 +99,7 @@ class GCPSecretsProvider(BaseSecretsProvider):
         """
         try:
             self.connect()
-            version_name = f"{self._secret_path()}/versions/latest"
+            version_name = f"{self._secret_path()}/versions/{self._secret_id_version}"
             response = self._client.access_secret_version(name=version_name)
             secret_text = response.payload.data.decode("UTF-8")
             return json.loads(secret_text)
@@ -92,20 +128,14 @@ class GCPSecretsProvider(BaseSecretsProvider):
                 self._client.create_secret(
                     parent=self._parent,
                     secret_id=self._secret_id,
-                    secret={
-                        "replication": {
-                            "automatic": {}
-                        }
-                    }
-                )
+                    secret=self._get_replication_config())
             except AlreadyExists:
                 pass  # Secret already exists, continue
 
             # Add a new version of the secret
             self._client.add_secret_version(
                 parent=self._secret_path(),
-                payload={"data": secret_text.encode("UTF-8")}
-            )
+                payload={"data": secret_text.encode("UTF-8")})
         except Exception as e:
             self.logger.error("Error storing secret: %s", e)
             raise SecretProviderException("Error storing secret: %s" % e)
@@ -131,7 +161,7 @@ class GCPSecretsProvider(BaseSecretsProvider):
         dictionary = self.get_secret_dictionary()
         if not dictionary:
             dictionary = {}
-            
+
         dictionary[key] = secret
         self.store_secret_dictionary(dictionary)
 
